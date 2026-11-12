@@ -1,7 +1,7 @@
 import express from 'express';
 import "./models/associations.js";
 
-import { PORT, FRONTEND_URL } from "./config/config.js";
+import { PORT } from "./config/config.js";
 import { sequelize } from './config/db.js';
 import cors from "cors";
 
@@ -18,7 +18,10 @@ try {
     app.use(express.json());
     
     app.use(cors({
-        origin: FRONTEND_URL,
+        origin: [
+            process.env.FRONTEND_URL,
+            process.env.FRONTEND_URL2,
+        ].filter(Boolean)
     }));
     
     app.use(userRoutes, productRoutes, purchaseOrderRoutes);
