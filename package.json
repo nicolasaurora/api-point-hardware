@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate": "sequelize-cli db:migrate --config sequelize.config.cjs --env production",
+    "migrate:undo": "sequelize-cli db:migrate:undo --config sequelize.config.cjs --env production",
+    "migration:generate": "sequelize-cli migration:generate --config sequelize.config.cjs --name",
+    "bootstrap:superadmin": "node src/scripts/bootstrapSuperadmin.js"
   },
   "keywords": [],
   "author": "",
@@ -15,10 +19,14 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^18.0.10",
     "express": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.1",
-    "sequelize": "^6.37.8",
-    "sqlite3": "^6.0.1"
+    "mysql2": "^3.24.6",
+    "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "sequelize-cli": "^6.6.5"
   }
 }

@@ -1,6 +1,7 @@
 import { User } from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../config/config.js";
 
 
 
@@ -154,9 +155,13 @@ export const loginUser = async (req,res) => {
         });
     }
 
-    const secretKey = 'programacion-3-2026';
+    
+    const token = jwt.sign(
+        { id: user.id, email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: "3h" }
+    );
 
-    const token = jwt.sign({ id: user.id, email, role: user.role }, secretKey, { expiresIn: '3h' });
 
     return res.json(token);
 

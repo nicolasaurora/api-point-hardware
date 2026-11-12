@@ -1,7 +1,7 @@
 import express from 'express';
 import "./models/associations.js";
 
-import { PORT } from './config/config.js';
+import { PORT, FRONTEND_URL } from "./config/config.js";
 import { sequelize } from './config/db.js';
 import cors from "cors";
 
@@ -14,12 +14,11 @@ const app = express();
 try {
 
     await sequelize.authenticate();
-    await sequelize.sync();
 
     app.use(express.json());
     
     app.use(cors({
-        origin: "http://localhost:5173",
+        origin: FRONTEND_URL,
     }));
     
     app.use(userRoutes, productRoutes, purchaseOrderRoutes);

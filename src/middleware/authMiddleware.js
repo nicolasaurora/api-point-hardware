@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../config/config.js";
 
 export const verifyToken = (req, res, next) => {
     const header = req.header("Authorization") || "";
@@ -11,7 +12,7 @@ export const verifyToken = (req, res, next) => {
     }
 
     try {
-        const payload = jwt.verify(token, "programacion-3-2026");
+        const payload = jwt.verify(token, JWT_SECRET);
 
         req.user = payload;
 
