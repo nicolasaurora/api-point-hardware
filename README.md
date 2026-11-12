@@ -1,4 +1,4 @@
-# API TPI
+# Backend Point Hardware
 
 Backend para una aplicación de ventas, desarrollado con Node.js, Express, Sequelize y SQLite.
 
@@ -7,32 +7,11 @@ Backend para una aplicación de ventas, desarrollado con Node.js, Express, Seque
 - Node.js
 - Express
 - Sequelize
-- SQLite
+- MySQL
 - JWT
 - bcrypt
 - CORS
 
-## Instalación
-
-```bash
-npm install
-```
-
-## Ejecución
-
-Modo desarrollo:
-
-```bash
-npm run dev
-```
-
-El servidor se ejecuta en:
-
-```text
-http://localhost:3000
-```
-
-La base de datos SQLite se crea automáticamente como `tpi.db`.
 
 ## Roles
 
@@ -73,7 +52,7 @@ Authorization: Bearer TOKEN
   "price": 25000,
   "stock": 10,
   "image": "https://ejemplo.com/imagen.jpg",
-  "category": "mice"
+  "category": "mouse"
 }
 ```
 
@@ -92,10 +71,4 @@ Authorization: Bearer TOKEN
 
 El usuario que realiza la orden se obtiene desde el token. El backend valida stock, calcula el total, registra los detalles y descuenta las unidades mediante una transacción.
 
-## Frontend
 
-CORS está configurado para permitir peticiones desde:
-
-```text
-http://localhost:5173
-```
