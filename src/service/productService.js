@@ -1,4 +1,10 @@
 import { Product } from '../models/Product.js';
+import {
+    isUniqueConstraintError,
+    isValidationError,
+    logError,
+    sendError,
+} from "../utils/errorResponse.js";
 
 export const getProducts = async (req, res) => {
     try {
@@ -6,9 +12,8 @@ export const getProducts = async (req, res) => {
 
         res.json(products);
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al obtener productos."
-        })
+        logError("getProducts", error);
+        return sendError(res, 500, "Error al obtener productos.", "INTERNAL_SERVER_ERROR");
     }
 };
 
@@ -19,17 +24,14 @@ export const getProduct = async (req, res) => {
         const product = await Product.findByPk(id);
 
         if(!product) {
-            return res.status(404).json({
-                message: "Producto no encontrado."
-            });
+            return sendError(res, 404, "Producto no encontrado.", "PRODUCT_NOT_FOUND");
         }
 
         res.json(product);
 
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al obtener el producto."
-        })
+        logError("getProduct", error);
+        return sendError(res, 500, "Error al obtener el producto.", "INTERNAL_SERVER_ERROR");
     }
 };
 
@@ -37,10 +39,21 @@ export const createProduct = async (req, res) => {
     try {
         const { name, price, stock, image, category } = req.body;
 
-        if (!name || price === undefined || !image || !category) {
-            return res.status(400).json({
-                message: "El nombre, precio, imagen y categoría son datos obligatorios."
-            });
+        if (
+            typeof name !== "string" ||
+            !name.trim() ||
+            price === undefined ||
+            typeof image !== "string" ||
+            !image.trim() ||
+            typeof category !== "string" ||
+            !category.trim()
+        ) {
+            return sendError(
+                res,
+                400,
+                "El nombre, precio, imagen y categoría son datos obligatorios.",
+                "INVALID_PRODUCT_DATA"
+            );
         }    
         
         const nameLower = name.trim().toLowerCase();
@@ -51,9 +64,7 @@ export const createProduct = async (req, res) => {
         });
 
         if(existingProduct) {
-            return res.status(400).json( {
-                message: "El producto ya existe."
-            });
+            return sendError(res, 409, "El nombre del producto ya existe.", "PRODUCT_NAME_ALREADY_EXISTS");
         }
 
 
@@ -71,9 +82,16 @@ export const createProduct = async (req, res) => {
             product: `${newProduct.name}`
         });
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al crear el producto."
-        });
+        if (isUniqueConstraintError(error)) {
+            return sendError(res, 409, "El nombre del producto ya existe.", "PRODUCT_NAME_ALREADY_EXISTS");
+        }
+
+        if (isValidationError(error)) {
+            return sendError(res, 400, "Los datos del producto no son válidos.", "INVALID_PRODUCT_DATA");
+        }
+
+        logError("createProduct", error);
+        return sendError(res, 500, "Error al crear el producto.", "INTERNAL_SERVER_ERROR");
     }
 }
 
@@ -85,9 +103,7 @@ export const updateProduct = async (req, res) => {
         const { name, price, stock, image, category } = req.body;
 
         if(!product) {
-            return res.status(400).json({
-                message: "El producto no existe."
-            });
+            return sendError(res, 404, "Producto no encontrado.", "PRODUCT_NOT_FOUND");
         }
 
         
@@ -103,9 +119,16 @@ export const updateProduct = async (req, res) => {
             message: `Producto actualizado: ${product.name}.`
         });
     } catch (error) {
-       return res.status(500).json({
-            message: "Error al actualizar el producto."
-        })
+        if (isUniqueConstraintError(error)) {
+            return sendError(res, 409, "El nombre del producto ya existe.", "PRODUCT_NAME_ALREADY_EXISTS");
+        }
+
+        if (isValidationError(error)) {
+            return sendError(res, 400, "Los datos del producto no son válidos.", "INVALID_PRODUCT_DATA");
+        }
+
+        logError("updateProduct", error);
+        return sendError(res, 500, "Error al actualizar el producto.", "INTERNAL_SERVER_ERROR");
     }
 
 }
@@ -116,9 +139,7 @@ export const deleteProduct = async(req, res) => {
         const product = await Product.findByPk(id);
 
         if(!product) {
-           return res.status(400).json({
-                message: "El producto no existe."
-            });
+           return sendError(res, 404, "Producto no encontrado.", "PRODUCT_NOT_FOUND");
         }
 
         await product.destroy();
@@ -127,8 +148,7 @@ export const deleteProduct = async(req, res) => {
             message: `Producto con id: ${id} eliminado.`
         });
     } catch (error) {
-       return res.status(500).json({
-            message: "Error al eliminar el producto."
-        })
+        logError("deleteProduct", error);
+        return sendError(res, 500, "Error al eliminar el producto.", "INTERNAL_SERVER_ERROR");
     }
 }

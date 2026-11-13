@@ -3,6 +3,7 @@ import { OrderDetails } from "../models/OrderDetails.js";
 import { Product } from "../models/Product.js";
 import { User } from "../models/User.js";
 import { sequelize } from "../config/db.js";
+import { logError, sendError } from "../utils/errorResponse.js";
 
 
 export const getPurchaseOrders = async (req, res) => {
@@ -19,9 +20,8 @@ export const getPurchaseOrders = async (req, res) => {
 
         res.json(purchaseOrders);
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al obtener ordenes de compra."
-        });
+        logError("getPurchaseOrders", error);
+        return sendError(res, 500, "Error al obtener órdenes de compra.", "INTERNAL_SERVER_ERROR");
     }
 }
 
@@ -30,9 +30,7 @@ export const getMyPurchaseOrders = async (req, res) => {
     const userId = req.user.id;
 
     if (!userId) {
-      return res.status(401).json({
-        message: "El token no contiene un usuario válido. Inicia sesión nuevamente."
-      });
+      return sendError(res, 401, "El token no contiene un usuario válido. Iniciá sesión nuevamente.", "INVALID_TOKEN");
     }
 
     const orders = await PurchaseOrder.findAll({
@@ -44,9 +42,8 @@ export const getMyPurchaseOrders = async (req, res) => {
     return res.json(orders);
     
   } catch (error) {
-    return res.status(500).json({
-      message: "Error al obtener tus órdenes de compra."
-    });
+    logError("getMyPurchaseOrders", error);
+    return sendError(res, 500, "Error al obtener tus órdenes de compra.", "INTERNAL_SERVER_ERROR");
   }
 };
 
@@ -78,9 +75,7 @@ export const getPurchaseOrder = async(req, res) => {
     });
 
     if(!purchaseOrder) {
-      return res.status(404).send({
-        message: "La orden de compra no existe."
-      });
+      return sendError(res, 404, "La orden de compra no existe.", "ORDER_NOT_FOUND");
     }
 
     const isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
@@ -88,17 +83,14 @@ export const getPurchaseOrder = async(req, res) => {
     const isOwner = purchaseOrder.userId === req.user.id;
 
     if (!isAdmin && !isOwner) {
-      return res.status(403).send({
-        message: "No tenés permiso para ver esta orden."
-      });
+      return sendError(res, 403, "No tenés permiso para ver esta orden.", "FORBIDDEN");
     }
 
     res.json(purchaseOrder);
 
   } catch (error) {
-    return res.status(500).send({
-      message: "Error al obtener la orden de compra."
-    });
+    logError("getPurchaseOrder", error);
+    return sendError(res, 500, "Error al obtener la orden de compra.", "INTERNAL_SERVER_ERROR");
   }
 }
 
@@ -108,9 +100,12 @@ export const createPurchaseOrder = async (req, res) => {
   const userId = req.user.id;
 
   if (!userId || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({
-      message: "El usuario y al menos un producto son obligatorios.",
-    });
+    return sendError(
+      res,
+      400,
+      "El usuario y al menos un producto son obligatorios.",
+      "INVALID_ORDER"
+    );
   }
 
   let transaction;
@@ -123,9 +118,7 @@ export const createPurchaseOrder = async (req, res) => {
     if (!user) {
       await transaction.rollback();
 
-      return res.status(404).json({
-        message: "El usuario no existe.",
-      });
+      return sendError(res, 404, "Usuario no encontrado.", "USER_NOT_FOUND");
     }
 
     let total = 0;
@@ -138,9 +131,12 @@ export const createPurchaseOrder = async (req, res) => {
 
         await transaction.rollback();
 
-        return res.status(400).json({
-          message: "Cada producto debe tener un ID y una cantidad mayor a cero.",
-        });
+        return sendError(
+          res,
+          400,
+          "Cada producto debe tener un ID y una cantidad mayor a cero.",
+          "INVALID_ORDER"
+        );
       }
 
       const product = await Product.findByPk(productId, {
@@ -150,17 +146,13 @@ export const createPurchaseOrder = async (req, res) => {
       if (!product) {
         await transaction.rollback();
 
-        return res.status(404).json({
-          message: `El producto con id ${productId} no existe.`,
-        });
+        return sendError(res, 404, "Producto no encontrado.", "PRODUCT_NOT_FOUND");
       }
 
       if (product.stock < quantity) {
         await transaction.rollback();
 
-        return res.status(400).json({
-          message: `Stock insuficiente para ${product.name}.`,
-        });
+        return sendError(res, 400, "Stock insuficiente para el producto solicitado.", "INSUFFICIENT_STOCK");
       }
 
       total += Number(product.price) * quantity;
@@ -210,9 +202,8 @@ export const createPurchaseOrder = async (req, res) => {
       await transaction.rollback();
     }
 
-    return res.status(500).json({
-      message: "Error al crear la orden de compra.",
-    });
+    logError("createPurchaseOrder", error);
+    return sendError(res, 500, "Error al crear la orden de compra.", "INTERNAL_SERVER_ERROR");
   }
 
 }

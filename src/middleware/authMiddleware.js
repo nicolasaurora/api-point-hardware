@@ -1,14 +1,13 @@
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/config.js";
+import { sendError } from "../utils/errorResponse.js";
 
 export const verifyToken = (req, res, next) => {
     const header = req.header("Authorization") || "";
     const token = header.split(" ")[1];
 
     if (!token) {
-        return res.status(401).json({
-            message: "No posee autorización requerida."
-        });
+        return sendError(res, 401, "Token de autorización requerido.", "INVALID_TOKEN");
     }
 
     try {
@@ -18,9 +17,7 @@ export const verifyToken = (req, res, next) => {
 
         next();
     } catch (error) {
-        return res.status(403).json({
-            message: "No posee permisos correctos."
-        });
+        return sendError(res, 401, "Token inválido o vencido.", "INVALID_TOKEN");
     }
 };
 
@@ -28,9 +25,7 @@ export const verifyToken = (req, res, next) => {
 export const verifyRole = (...rolesPermitidos) => {
     return (req, res, next) => {
         if (!req.user || !rolesPermitidos.includes(req.user.role)) {
-            return res.status(403).json({
-                message: "No tenés permisos para realizar esta acción."
-            });
+            return sendError(res, 403, "No tenés permisos para realizar esta acción.", "FORBIDDEN");
         }
 
         next();

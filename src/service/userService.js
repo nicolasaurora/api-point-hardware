@@ -2,8 +2,12 @@ import { User } from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/config.js";
-
-
+import {
+    isUniqueConstraintError,
+    isValidationError,
+    logError,
+    sendError,
+} from "../utils/errorResponse.js";
 
 export const getUsers = async (req, res) => {
     try {
@@ -12,7 +16,8 @@ export const getUsers = async (req, res) => {
         });
         res.json(users);
     } catch (error) {
-        return res.status(500).json({ message: "Error al obtener usuarios." });
+        logError("getUsers", error);
+        return sendError(res, 500, "Error al obtener usuarios.", "INTERNAL_SERVER_ERROR");
     }
 };
 
@@ -24,12 +29,13 @@ export const getUser = async (req, res) => {
         });
 
         if (!user) {
-            return res.status(404).json({ message: "Usuario no encontrado." });
+            return sendError(res, 404, "Usuario no encontrado.", "USER_NOT_FOUND");
         }
 
         res.json(user);
     } catch (error) {
-        return res.status(500).json({ message: "Error al obtener el usuario." });
+        logError("getUser", error);
+        return sendError(res, 500, "Error al obtener el usuario.", "INTERNAL_SERVER_ERROR");
     }
 }
 
@@ -37,10 +43,13 @@ export const createUser = async (req, res) => {
     try {
         const { firstName, lastName, email, password } = req.body;
 
-        if (!firstName || !lastName || !email || !password ) {
-           return res.status(400).json({ 
-            message: "El nombre, apellido, email y password son datos obligatorios." 
-            });
+        if (!firstName || !lastName || typeof email !== "string" || typeof password !== "string") {
+           return sendError(
+            res,
+            400,
+            "El nombre, apellido, email y contraseña son datos obligatorios.",
+            "INVALID_USER_DATA"
+           );
         }
 
         const emailLower = email.trim().toLowerCase();
@@ -50,16 +59,10 @@ export const createUser = async (req, res) => {
         });
 
         if (existingUser) {
-            return res.status(400).json({
-                message: "El mail ya se encuentra registrado." 
-            });
+            return sendError(res, 409, "El email ya se encuentra registrado.", "EMAIL_ALREADY_EXISTS");
         }
 
-        const saltRounds = 10;
-
-        const salt = await bcrypt.genSalt(saltRounds);
-
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         const newUser = await User.create( {
             firstName,
@@ -73,9 +76,16 @@ export const createUser = async (req, res) => {
             user: `${newUser.firstName} ${newUser.lastName}`
         });
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al crear el usuario." 
-        });
+        if (isUniqueConstraintError(error)) {
+            return sendError(res, 409, "El email ya se encuentra registrado.", "EMAIL_ALREADY_EXISTS");
+        }
+
+        if (isValidationError(error)) {
+            return sendError(res, 400, "Los datos del usuario no son válidos.", "INVALID_USER_DATA");
+        }
+
+        logError("createUser", error);
+        return sendError(res, 500, "Error al crear el usuario.", "INTERNAL_SERVER_ERROR");
     }
 }
 
@@ -87,27 +97,34 @@ export const updateUser = async (req, res) => {
         const user = await User.findByPk(id);
 
         if(!user) {
-            return res.status(400).json({
-                message: "El usuario no existe."
-            });
+            return sendError(res, 404, "Usuario no encontrado.", "USER_NOT_FOUND");
         }
 
-        const saltRounds = 10;
+        if (!firstName || !lastName || typeof email !== "string" || typeof password !== "string") {
+            return sendError(res, 400, "Los datos del usuario no son válidos.", "INVALID_USER_DATA");
+        }
 
-        const salt = await bcrypt.genSalt(saltRounds);
-
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         await user.update({
             firstName,
             lastName,
-            email,
+            email: email.trim().toLowerCase(),
             password: hashedPassword,
         });
 
         res.json(`Usuario actualizado: ${user.firstName} ${user.lastName}`);
     } catch (error) {
-        return res.status(500).json({ message: "Error al actualizar el usuario." });
+        if (isUniqueConstraintError(error)) {
+            return sendError(res, 409, "El email ya se encuentra registrado.", "EMAIL_ALREADY_EXISTS");
+        }
+
+        if (isValidationError(error)) {
+            return sendError(res, 400, "Los datos del usuario no son válidos.", "INVALID_USER_DATA");
+        }
+
+        logError("updateUser", error);
+        return sendError(res, 500, "Error al actualizar el usuario.", "INTERNAL_SERVER_ERROR");
     }
 }
 
@@ -116,9 +133,7 @@ export const deleteUser = async (req, res) => {
         const { id } = req.params;
         const user = await User.findByPk(id);
         if(!user) {
-            return res.status(400).json({
-                message: "El usuario no existe."
-            });
+            return sendError(res, 404, "Usuario no encontrado.", "USER_NOT_FOUND");
         }
         await user.destroy();
 
@@ -126,14 +141,20 @@ export const deleteUser = async (req, res) => {
             message: `Usuario con id: ${id} eliminado.`
         });
     } catch (error) {
-        return res.status(500).json({ message: "Error al eliminar el usuario." });
+        logError("deleteUser", error);
+        return sendError(res, 500, "Error al eliminar el usuario.", "INTERNAL_SERVER_ERROR");
     }
 }
 
 
 
 export const loginUser = async (req,res) => {
+    try {
     const { email, password } = req.body;
+
+    if (typeof email !== "string" || typeof password !== "string") {
+        return sendError(res, 401, "Email o contraseña incorrectos.", "INVALID_CREDENTIALS");
+    }
 
     const emailLower = email.trim().toLowerCase();
 
@@ -142,28 +163,29 @@ export const loginUser = async (req,res) => {
     });
 
     if(!user) {
-        return res.status(401).json({
-            message: "Usuario no existente."
-        });
+        return sendError(res, 401, "Email o contraseña incorrectos.", "INVALID_CREDENTIALS");
     }
 
     const coincide = await bcrypt.compare(password, user.password);
 
     if(!coincide) {
-        return res.status(401).json({
-            message: "Email y/o contraseña incorrecta."
-        });
+        return sendError(res, 401, "Email o contraseña incorrectos.", "INVALID_CREDENTIALS");
     }
 
     
     const token = jwt.sign(
-        { id: user.id, email, role: user.role },
+        { id: user.id, email: user.email, role: user.role },
         JWT_SECRET,
         { expiresIn: "3h" }
     );
 
 
     return res.json(token);
+
+    } catch (error) {
+        logError("loginUser", error);
+        return sendError(res, 500, "Error al iniciar sesión.", "INTERNAL_SERVER_ERROR");
+    }
 
 }
 
@@ -175,15 +197,11 @@ export const updateUserRole = async (req, res) => {
         const user = await User.findByPk(id);
 
         if (!user) {
-            return res.status(404).json({
-                message: `El usuario no existe.`
-            });
+            return sendError(res, 404, "Usuario no encontrado.", "USER_NOT_FOUND");
         }
 
         if (!["superadmin", "admin", "user"].includes(role)) {
-            return res.status(400).json({
-                message: "El role debe ser valido."
-            });
+            return sendError(res, 400, "El rol enviado no es válido.", "INVALID_ROLE");
         }
 
         await user.update({
@@ -193,8 +211,7 @@ export const updateUserRole = async (req, res) => {
         res.json("Rol de usuario actualizado.");
         
     } catch (error) {
-        return res.status(500).json({
-            message: "Error al actualizar el rol."
-        });
+        logError("updateUserRole", error);
+        return sendError(res, 500, "Error al actualizar el rol.", "INTERNAL_SERVER_ERROR");
     }
 }
