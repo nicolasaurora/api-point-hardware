@@ -20,28 +20,82 @@ const isValidDate = (value) => {
   return !Number.isNaN(parsedDate.getTime()) && formatDate(parsedDate) === value;
 };
 
+const getDashboardSummaryData = async () => {
+  const orderSummary = await PurchaseOrder.findOne({
+    attributes: [
+      [fn("COALESCE", fn("SUM", col("total")), 0), "totalRevenue"],
+      [fn("COUNT", col("id")), "totalOrders"],
+      [fn("COALESCE", fn("AVG", col("total")), 0), "averageTicket"],
+    ],
+    raw: true,
+  });
+
+  const unitsSummary = await OrderDetails.findOne({
+    attributes: [[fn("COALESCE", fn("SUM", col("quantity")), 0), "unitsSold"]],
+    raw: true,
+  });
+
+  return {
+    totalRevenue: Number(orderSummary.totalRevenue),
+    totalOrders: Number(orderSummary.totalOrders),
+    averageTicket: Number(orderSummary.averageTicket),
+    unitsSold: Number(unitsSummary.unitsSold),
+  };
+};
+
+const getTopProductsData = async () => {
+  const topProducts = await sequelize.query(
+    `
+      SELECT
+        od.productId AS productId,
+        p.name AS name,
+        SUM(od.quantity) AS unitsSold,
+        SUM(od.quantity * od.unitPrice) AS revenue
+      FROM order_details AS od
+      INNER JOIN products AS p ON p.id = od.productId
+      GROUP BY od.productId, p.id, p.name
+      ORDER BY unitsSold DESC, revenue DESC
+      LIMIT 5
+    `,
+    { type: QueryTypes.SELECT }
+  );
+
+  return topProducts.map((product) => ({
+    productId: Number(product.productId),
+    name: product.name,
+    unitsSold: Number(product.unitsSold),
+    revenue: Number(product.revenue),
+  }));
+};
+
+const getLowStockProductsData = async () => {
+  return Product.findAll({
+    attributes: ["id", "name", "stock", "category", "image"],
+    where: {
+      stock: {
+        [Op.lte]: LOW_STOCK_THRESHOLD,
+      },
+    },
+    order: [
+      ["stock", "ASC"],
+      ["name", "ASC"],
+    ],
+    raw: true,
+  });
+};
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
 export const getDashboardSummary = async (req, res) => {
   try {
-    const orderSummary = await PurchaseOrder.findOne({
-      attributes: [
-        [fn("COALESCE", fn("SUM", col("total")), 0), "totalRevenue"],
-        [fn("COUNT", col("id")), "totalOrders"],
-        [fn("COALESCE", fn("AVG", col("total")), 0), "averageTicket"],
-      ],
-      raw: true,
-    });
-
-    const unitsSummary = await OrderDetails.findOne({
-      attributes: [[fn("COALESCE", fn("SUM", col("quantity")), 0), "unitsSold"]],
-      raw: true,
-    });
-
-    return res.json({
-      totalRevenue: Number(orderSummary.totalRevenue),
-      totalOrders: Number(orderSummary.totalOrders),
-      averageTicket: Number(orderSummary.averageTicket),
-      unitsSold: Number(unitsSummary.unitsSold),
-    });
+    const summary = await getDashboardSummaryData();
+    return res.json(summary);
   } catch (error) {
     logError("getDashboardSummary", error);
     return sendError(
@@ -55,30 +109,8 @@ export const getDashboardSummary = async (req, res) => {
 
 export const getTopProducts = async (req, res) => {
   try {
-    const topProducts = await sequelize.query(
-      `
-        SELECT
-          od.productId AS productId,
-          p.name AS name,
-          SUM(od.quantity) AS unitsSold,
-          SUM(od.quantity * od.unitPrice) AS revenue
-        FROM order_details AS od
-        INNER JOIN products AS p ON p.id = od.productId
-        GROUP BY od.productId, p.id, p.name
-        ORDER BY unitsSold DESC, revenue DESC
-        LIMIT 5
-      `,
-      { type: QueryTypes.SELECT }
-    );
-
-    return res.json(
-      topProducts.map((product) => ({
-        productId: Number(product.productId),
-        name: product.name,
-        unitsSold: Number(product.unitsSold),
-        revenue: Number(product.revenue),
-      }))
-    );
+    const topProducts = await getTopProductsData();
+    return res.json(topProducts);
   } catch (error) {
     logError("getTopProducts", error);
     return sendError(
@@ -161,18 +193,7 @@ export const getSalesOverTime = async (req, res) => {
 
 export const getLowStockProducts = async (req, res) => {
   try {
-    const products = await Product.findAll({
-      attributes: ["id", "name", "stock", "category", "image"],
-      where: {
-        stock: {
-          [Op.lte]: LOW_STOCK_THRESHOLD,
-        },
-      },
-      order: [
-        ["stock", "ASC"],
-        ["name", "ASC"],
-      ],
-    });
+    const products = await getLowStockProductsData();
 
     return res.json({
       threshold: LOW_STOCK_THRESHOLD,
@@ -184,6 +205,94 @@ export const getLowStockProducts = async (req, res) => {
       res,
       500,
       "Error al obtener los productos con bajo stock.",
+      "INTERNAL_SERVER_ERROR"
+    );
+  }
+};
+
+export const getDashboardInsights = async (req, res) => {
+  try {
+    const [summary, topProducts, lowStockProducts] = await Promise.all([
+      getDashboardSummaryData(),
+      getTopProductsData(),
+      getLowStockProductsData(),
+    ]);
+
+    const insights = [];
+
+    if (summary.totalOrders === 0) {
+      insights.push({
+        type: "info",
+        code: "NO_SALES",
+        title: "Sin ventas registradas",
+        message: "Todavía no se registraron órdenes de compra.",
+      });
+    } else {
+      insights.push({
+        type: "success",
+        code: "SALES_SUMMARY",
+        title: "Resumen de ventas",
+        message: `Se registraron ${summary.totalOrders} órdenes por un total de ${formatCurrency(summary.totalRevenue)}.`,
+      });
+
+      const topProduct = topProducts[0];
+      if (topProduct) {
+        insights.push({
+          type: "success",
+          code: "TOP_PRODUCT",
+          title: "Producto más vendido",
+          message: `${topProduct.name} lidera las ventas con ${topProduct.unitsSold} unidades vendidas.`,
+          productId: topProduct.productId,
+        });
+      }
+    }
+
+    const outOfStockProducts = lowStockProducts.filter((product) => product.stock === 0);
+    if (outOfStockProducts.length > 0) {
+      insights.push({
+        type: "warning",
+        code: "OUT_OF_STOCK",
+        title: "Productos sin stock",
+        message: `${outOfStockProducts.length} producto(s) no tienen unidades disponibles.`,
+      });
+    }
+
+    const lowStockAvailableProducts = lowStockProducts.filter((product) => product.stock > 0);
+    if (lowStockAvailableProducts.length > 0) {
+      const productNames = lowStockAvailableProducts
+        .slice(0, 3)
+        .map((product) => product.name)
+        .join(", ");
+      const remainingProducts = lowStockAvailableProducts.length - 3;
+      const remainingText = remainingProducts > 0 ? ` y ${remainingProducts} más` : "";
+
+      insights.push({
+        type: "warning",
+        code: "LOW_STOCK",
+        title: "Reposición recomendada",
+        message: `Hay ${lowStockAvailableProducts.length} producto(s) con stock menor o igual a ${LOW_STOCK_THRESHOLD}: ${productNames}${remainingText}.`,
+      });
+    }
+
+    if (lowStockProducts.length === 0) {
+      insights.push({
+        type: "success",
+        code: "STOCK_HEALTHY",
+        title: "Stock saludable",
+        message: `No hay productos con stock menor o igual a ${LOW_STOCK_THRESHOLD}.`,
+      });
+    }
+
+    return res.json({
+      period: "Toda la historia",
+      insights,
+    });
+  } catch (error) {
+    logError("getDashboardInsights", error);
+    return sendError(
+      res,
+      500,
+      "Error al obtener los insights del dashboard.",
       "INTERNAL_SERVER_ERROR"
     );
   }

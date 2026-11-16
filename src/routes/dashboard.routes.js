@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getDashboardInsights,
   getDashboardSummary,
   getLowStockProducts,
   getSalesOverTime,
@@ -16,5 +17,12 @@ router.get("/dashboard/top-products", verifyToken, verifyRole("superadmin", "adm
 router.get("/dashboard/sales-over-time", verifyToken, verifyRole("superadmin", "admin"), getSalesOverTime);
 
 router.get("/dashboard/low-stock", verifyToken, verifyRole("superadmin", "admin"), getLowStockProducts);
+
+router.get(
+  "/dashboard/insights",
+  verifyToken,
+  verifyRole("superadmin", "admin"),
+  getDashboardInsights
+);
 
 export default router;
