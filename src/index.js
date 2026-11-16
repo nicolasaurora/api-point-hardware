@@ -8,6 +8,7 @@ import cors from "cors";
 import userRoutes from './routes/user.routes.js';
 import productRoutes from './routes/product.routes.js';
 import purchaseOrderRoutes from './routes/purchaseOrder.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
 
 const app = express();
 
@@ -24,7 +25,7 @@ try {
         ].filter(Boolean)
     }));
     
-    app.use(userRoutes, productRoutes, purchaseOrderRoutes);
+    app.use(userRoutes, productRoutes, purchaseOrderRoutes, dashboardRoutes);
 
     app.listen(PORT, () => {
         console.log(`Servidor escuchando en puerto ${PORT}`);
