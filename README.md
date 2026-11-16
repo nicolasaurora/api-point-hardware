@@ -49,7 +49,7 @@ Authorization: Bearer TOKEN
 | GET | `/dashboard/low-stock` | Productos con stock menor o igual a 5 unidades. |
 | GET | `/dashboard/insights` | Insights automáticos basados en ventas y stock reales. |
 
-Los insights del dashboard no utilizan servicios externos de IA ni generan costos. Analizan métricas reales para informar productos destacados, bajo stock, falta de ventas y estado general del inventario.
+Los insights del dashboard analizan métricas reales para informar productos destacados, bajo stock, falta de ventas y estado general del inventario.
 
 ## Modelo de producto
 
